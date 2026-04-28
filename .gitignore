@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+*.exe
+~$*
+*.tmp.xlsx
+재고현황조회*.xlsx
+진벌리 제품 위치*.xlsx
+buyList*.xlsx
+2026-*.xlsx
