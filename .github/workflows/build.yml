@@ -37,7 +37,7 @@ jobs:
 
       - name: PyInstaller로 exe 빌드
         run: |
-          pyinstaller --onefile --windowed --name "재고매칭" --add-data "version.txt;." 재고매칭.py
+          pyinstaller --onefile --windowed --name "inventory-match" --add-data "version.txt;." 재고매칭.py
 
       - name: Release 생성 및 exe 업로드
         uses: softprops/action-gh-release@v2
@@ -49,8 +49,10 @@ jobs:
 
             자동 빌드된 실행파일입니다.
 
-            **[재고매칭.exe 다운로드](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/재고매칭.exe)**
-          files: dist/재고매칭.exe
+            **[inventory-match.exe 다운로드](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/inventory-match.exe)**
+
+            다운로드 후 `재고매칭.exe`로 자유롭게 이름 변경 가능합니다.
+          files: dist/inventory-match.exe
           draft: false
           prerelease: false
         env:
