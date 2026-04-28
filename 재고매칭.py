@@ -70,6 +70,64 @@ def check_for_update():
     return None
 
 
+def perform_self_update(download_url: str, latest_version: str) -> None:
+    """새 exe를 다운로드한 뒤 배치 파일로 자기 자신을 교체하고 재시작."""
+    if not getattr(sys, "frozen", False):
+        # 개발 환경(파이썬 직접 실행)에서는 브라우저로 폴백
+        webbrowser.open(download_url)
+        sys.exit(0)
+
+    current_exe = Path(sys.executable)
+    new_exe = current_exe.with_name(current_exe.stem + f"_new_{latest_version}.exe")
+
+    # 진행 상황 표시용 작은 창
+    progress = tk.Toplevel()
+    progress.title("업데이트 다운로드 중")
+    progress.geometry("360x80")
+    progress.attributes("-topmost", True)
+    label = tk.Label(progress, text=f"새 버전 {latest_version} 다운로드 중...\n잠시만 기다려주세요.", padx=20, pady=20)
+    label.pack()
+    progress.update()
+
+    try:
+        urllib.request.urlretrieve(download_url, new_exe)
+    except Exception as e:
+        progress.destroy()
+        messagebox.showerror("업데이트 실패", f"다운로드 중 오류:\n{e}")
+        return
+
+    progress.destroy()
+
+    # 배치 파일: 현재 exe 종료 대기 → 교체 → 새 exe 실행 → 자기 삭제
+    bat_path = current_exe.with_name("__update__.bat")
+    bat_content = (
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "ping 127.0.0.1 -n 2 >nul\r\n"
+        f':loop\r\n'
+        f'del "{current_exe}" >nul 2>&1\r\n'
+        f'if exist "{current_exe}" (\r\n'
+        f'  ping 127.0.0.1 -n 2 >nul\r\n'
+        f'  goto loop\r\n'
+        f')\r\n'
+        f'move /Y "{new_exe}" "{current_exe}" >nul\r\n'
+        f'start "" "{current_exe}"\r\n'
+        f'del "%~f0"\r\n'
+    )
+    bat_path.write_text(bat_content, encoding="utf-8")
+
+    # 백그라운드로 배치 실행 (콘솔창 안 뜸)
+    import subprocess
+    CREATE_NO_WINDOW = 0x08000000
+    DETACHED_PROCESS = 0x00000008
+    subprocess.Popen(
+        ["cmd", "/c", str(bat_path)],
+        creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS,
+        close_fds=True,
+    )
+    sys.exit(0)
+
+
 def prompt_update_if_available():
     info = check_for_update()
     if info is None:
@@ -79,15 +137,15 @@ def prompt_update_if_available():
     if not url:
         return
     answer = messagebox.askyesno(
-        "업데이트 알림",
+        "업데이트",
         f"새 버전이 출시되었습니다.\n\n"
         f"  현재 버전: {current}\n"
         f"  최신 버전: {latest}\n\n"
-        f"브라우저에서 다운로드 페이지를 열까요?",
+        f"지금 자동으로 업데이트할까요?\n"
+        f"(다운로드 후 프로그램이 자동으로 재시작됩니다)",
     )
     if answer:
-        webbrowser.open(url)
-        sys.exit(0)
+        perform_self_update(url, latest)
 
 
 def get_desktop() -> Path:
