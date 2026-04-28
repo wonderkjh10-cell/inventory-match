@@ -78,7 +78,10 @@ def perform_self_update(download_url: str, latest_version: str) -> None:
         sys.exit(0)
 
     current_exe = Path(sys.executable)
-    new_exe = current_exe.with_name(current_exe.stem + f"_new_{latest_version}.exe")
+    new_exe = current_exe.parent / f"재고매칭_v{latest_version}.exe"
+    if new_exe.exists():
+        # 같은 버전 파일이 이미 있으면 임시명으로
+        new_exe = current_exe.parent / f"재고매칭_v{latest_version}_new.exe"
 
     # 진행 상황 표시용 작은 창
     progress = tk.Toplevel()
@@ -98,7 +101,7 @@ def perform_self_update(download_url: str, latest_version: str) -> None:
 
     progress.destroy()
 
-    # 배치 파일: 현재 exe 종료 대기 → 교체 → 새 exe 실행 → 자기 삭제
+    # 배치: 현재 exe 종료 대기 → 새 버전 exe 실행 → 이전 버전 exe 삭제 → 자기 삭제
     bat_path = current_exe.with_name("__update__.bat")
     bat_content = (
         "@echo off\r\n"
@@ -110,8 +113,7 @@ def perform_self_update(download_url: str, latest_version: str) -> None:
         f'  ping 127.0.0.1 -n 2 >nul\r\n'
         f'  goto loop\r\n'
         f')\r\n'
-        f'move /Y "{new_exe}" "{current_exe}" >nul\r\n'
-        f'start "" "{current_exe}"\r\n'
+        f'start "" "{new_exe}"\r\n'
         f'del "%~f0"\r\n'
     )
     bat_path.write_text(bat_content, encoding="utf-8")
