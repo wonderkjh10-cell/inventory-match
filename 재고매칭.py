@@ -21,6 +21,7 @@ import shutil
 import webbrowser
 import urllib.request
 from pathlib import Path
+from send2trash import send2trash
 from openpyxl import load_workbook
 from datetime import datetime, date
 import tkinter as tk
@@ -432,14 +433,21 @@ def main():
     result = update_location_file(location_file, stock_map, expiry_map, output_path)
     print(f"      -> 저장: {output_path}")
 
-    print(f"[4/5] 재고현황 파일 삭제 중: {stock_file.name}")
+    print(f"[4/5] 입력 파일 3개를 휴지통으로 이동...")
     delete_ok = True
-    try:
-        stock_file.unlink()
-        print("      -> 삭제 완료")
-    except Exception as e:
-        delete_ok = False
-        print(f"      -> 삭제 실패: {e}")
+    deleted = []
+    failed = []
+    for f in (stock_file, location_file, buylist_file):
+        try:
+            send2trash(str(f))
+            deleted.append(f.name)
+        except Exception as e:
+            delete_ok = False
+            failed.append(f"{f.name}: {e}")
+    for n in deleted:
+        print(f"      -> 휴지통 이동: {n}")
+    for n in failed:
+        print(f"      -> 실패: {n}")
 
     print("[5/5] 작업 완료")
     print("=" * 60)
@@ -454,7 +462,7 @@ def main():
         f"저장 위치:\n{output_path}"
     )
     if not delete_ok:
-        msg += "\n\n[주의] 재고현황 파일 삭제에 실패했습니다."
+        msg += "\n\n[주의] 일부 입력 파일을 휴지통으로 이동하지 못했습니다."
     messagebox.showinfo("완료", msg)
 
 
