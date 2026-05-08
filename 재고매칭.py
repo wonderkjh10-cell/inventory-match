@@ -25,7 +25,7 @@ from send2trash import send2trash
 from openpyxl import load_workbook
 from datetime import datetime, date
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 GITHUB_REPO = "wonderkjh10-cell/inventory-match"
 UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -148,6 +148,52 @@ def prompt_update_if_available():
     )
     if answer:
         perform_self_update(url, latest)
+
+
+class ProgressWindow:
+    """단계별 진행 상황을 보여주는 진행률 창."""
+
+    def __init__(self, total_steps: int, title: str = "재고매칭 진행 중"):
+        self.total = total_steps
+        self.current = 0
+        self.win = tk.Toplevel()
+        self.win.title(title)
+        self.win.geometry("460x150")
+        self.win.attributes("-topmost", True)
+        self.win.resizable(False, False)
+
+        self.step_label = tk.Label(
+            self.win, text="준비 중...", font=("맑은 고딕", 10), pady=10
+        )
+        self.step_label.pack()
+
+        self.bar = ttk.Progressbar(
+            self.win, length=420, mode="determinate", maximum=total_steps
+        )
+        self.bar.pack(pady=5)
+
+        self.percent_label = tk.Label(self.win, text="0 / {} (0%)".format(total_steps))
+        self.percent_label.pack()
+
+        self.win.update()
+
+    def step(self, message: str):
+        self.current += 1
+        self.bar["value"] = self.current
+        self.step_label.config(text=f"[{self.current}/{self.total}] {message}")
+        pct = int(self.current / self.total * 100)
+        self.percent_label.config(text=f"{self.current} / {self.total} ({pct}%)")
+        self.win.update()
+
+    def set_message(self, message: str):
+        self.step_label.config(text=message)
+        self.win.update()
+
+    def close(self):
+        try:
+            self.win.destroy()
+        except Exception:
+            pass
 
 
 def get_desktop() -> Path:
@@ -320,8 +366,8 @@ def update_location_file(
                 code = f"{품번_str}-0001"
         code_str = str(code).strip() if code is not None else ""
 
-        # 재고 매칭
-        if code_str:
+        # 재고 매칭 (stock_map이 비어 있으면 건너뜀)
+        if code_str and stock_map:
             if code_str in stock_map:
                 ws.cell(row=row_idx, column=STOCK_COL).value = stock_map[code_str]
                 stock_matched += 1
@@ -442,11 +488,11 @@ def main():
 
     prompt_update_if_available()
 
-    files = pick_files("엑셀 파일 3개를 한번에 선택하세요 (재고현황, 제품위치, buyList — 순서 무관)")
-    if len(files) < 3:
+    files = pick_files("엑셀 파일을 선택하세요 (제품위치+buyList 필수, 재고현황은 선택 — 순서 무관)")
+    if len(files) < 2:
         messagebox.showwarning(
             "취소",
-            f"엑셀 파일 3개를 함께 선택해야 합니다. (선택된 개수: {len(files)})",
+            f"엑셀 파일을 최소 2개(제품위치, buyList) 이상 선택해야 합니다. (선택된 개수: {len(files)})",
         )
         return
 
@@ -461,8 +507,6 @@ def main():
             buylist_file = p
 
     missing = []
-    if stock_file is None:
-        missing.append("재고현황 (시트명 '재고현황' 또는 첫셀 '재고현황조회')")
     if location_file is None:
         missing.append("제품위치 ('진벌리' 시트 포함)")
     if buylist_file is None:
@@ -475,29 +519,41 @@ def main():
         return
 
     print("=" * 60)
-    print(f"  재고현황: {stock_file.name}")
+    print(f"  재고현황: {stock_file.name if stock_file else '(없음 — 재고 매칭 건너뜀)'}")
     print(f"  제품위치: {location_file.name}")
     print(f"  buyList:  {buylist_file.name}")
     print()
 
-    print("[1/5] 재고현황 읽는 중...")
-    stock_map = build_stock_map(stock_file)
-    print(f"      -> {len(stock_map)}개 상품코드 로드")
+    progress = ProgressWindow(total_steps=5)
 
+    if stock_file is not None:
+        progress.step("재고현황 읽는 중...")
+        print("[1/5] 재고현황 읽는 중...")
+        stock_map = build_stock_map(stock_file)
+        print(f"      -> {len(stock_map)}개 상품코드 로드")
+    else:
+        progress.step("재고현황 파일 없음 — 재고 매칭 건너뜀")
+        print("[1/5] 재고현황 파일 없음 — 재고 매칭 건너뜀")
+        stock_map = {}
+
+    progress.step("buyList 읽는 중...")
     print("[2/5] buyList 읽는 중...")
     expiry_map = build_expiry_map(buylist_file)
     print(f"      -> {len(expiry_map)}개 품목코드 로드 (동일코드는 최신 소비기한)")
 
     output_path = make_output_path()
+    progress.step("제품위치 갱신 중... (시간이 다소 걸릴 수 있습니다)")
     print("[3/5] 제품위치 갱신 중...")
     result = update_location_file(location_file, stock_map, expiry_map, output_path)
     print(f"      -> 저장: {output_path}")
 
-    print(f"[4/5] 입력 파일 3개를 휴지통으로 이동...")
+    targets = [f for f in (stock_file, location_file, buylist_file) if f is not None]
+    progress.step(f"입력 파일 {len(targets)}개를 휴지통으로 이동...")
+    print(f"[4/5] 입력 파일 {len(targets)}개를 휴지통으로 이동...")
     delete_ok = True
     deleted = []
     failed = []
-    for f in (stock_file, location_file, buylist_file):
+    for f in targets:
         try:
             send2trash(str(f))
             deleted.append(f.name)
@@ -509,13 +565,21 @@ def main():
     for n in failed:
         print(f"      -> 실패: {n}")
 
+    progress.step("작업 완료!")
     print("[5/5] 작업 완료")
     print("=" * 60)
+    progress.close()
 
+    if stock_file is not None:
+        stock_section = (
+            f"[재고]\n"
+            f"  매칭 성공: {result['stock_matched']}건\n"
+            f"  매칭 실패: {result['stock_unmatched']}건\n\n"
+        )
+    else:
+        stock_section = "[재고]\n  건너뜀 (재고현황 파일 없음)\n\n"
     msg = (
-        f"[재고]\n"
-        f"  매칭 성공: {result['stock_matched']}건\n"
-        f"  매칭 실패: {result['stock_unmatched']}건\n\n"
+        f"{stock_section}"
         f"[유통기한]\n"
         f"  매칭 성공: {result['expiry_matched']}건\n"
         f"  매칭 실패: {result['expiry_unmatched']}건\n\n"
